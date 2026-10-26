@@ -444,32 +444,22 @@
       var imageById = {};
       try {
         var pictureDirectoryUrl = new URL("pictures/", window.location.href);
-        var pictureResponse = await fetch(pictureDirectoryUrl.href, { cache: "no-store" });
+        var pictureResponse = await fetch("pictures.json", { cache: "no-store" });
         if (!pictureResponse.ok) {
           throw new Error("HTTP " + pictureResponse.status);
         }
 
-        var directoryDocument = new DOMParser().parseFromString(await pictureResponse.text(), "text/html");
-        var pictureFiles = Array.prototype.map.call(
-          directoryDocument.querySelectorAll("a[href]"),
-          function (link) {
-            try {
-              var url = new URL(link.getAttribute("href"), pictureDirectoryUrl);
-              if (url.origin !== pictureDirectoryUrl.origin ||
-                  url.pathname.indexOf(pictureDirectoryUrl.pathname) !== 0) {
-                return null;
-              }
-              var encodedName = url.pathname.split("/").pop();
-              var filename = decodeURIComponent(encodedName);
-              if (!/\.(avif|gif|jpe?g|png|webp)$/i.test(filename)) {
-                return null;
-              }
-              return { filename: filename, url: url.href };
-            } catch (error) {
-              return null;
-            }
-          }
-        ).filter(Boolean);
+        var pictureNames = await pictureResponse.json();
+        if (!Array.isArray(pictureNames) || !pictureNames.every(function (filename) {
+          return typeof filename === "string" &&
+            filename.indexOf("/") === -1 && filename.indexOf("\\") === -1 &&
+            /\.(avif|gif|jpe?g|png|webp)$/i.test(filename);
+        })) {
+          throw new Error("pictures.json must contain an array of image filenames");
+        }
+        var pictureFiles = pictureNames.map(function (filename) {
+          return { filename: filename, url: new URL(encodeURIComponent(filename), pictureDirectoryUrl).href };
+        });
 
         if (!pictureFiles.length) {
           throw new Error("No supported image files were listed");
@@ -485,9 +475,9 @@
           imageById[exampleId] = matches.length ? matches[0].url : "";
         });
       } catch (error) {
-        console.error("Could not index the pictures folder", error);
+        console.error("Could not load pictures.json", error);
         showDataError(
-          "The pictures folder could not be indexed. The web server must expose a directory listing for pictures/. " +
+          "The image list could not be loaded from pictures.json. " +
           error.message + "."
         );
         return;
